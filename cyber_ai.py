@@ -87,6 +87,7 @@ def url_predict(body):
     predictions = mal_url_model.predict(embeded_text) #classify the data
     
     sentiment = (predictions > 0.5).astype(np.int) #calculate the index of max sentiment
+    # sentiment = 1
    
     if sentiment==0:
          t_sentiment = 'bad' #set appropriate sentiment
@@ -105,15 +106,15 @@ def nlp_model(df):
     new_df = df
     new_df['url'] = new_df['host'].astype(str).values + new_df['uri'].astype(str).values
     new_df = clean_text(new_df)
-
+    
     #convert dataframe into a array
     df_array = new_df[['url']].to_numpy()
-
+    print(df_array[:10])
     # creating a blank series
     label_array = pd.Series([])
 
     for i in range(df_array.shape[0]):
-
+    
         #create json requests 
         lists = df_array[i].tolist()
         data = {'data':lists}
@@ -130,7 +131,7 @@ def nlp_model(df):
         label_array[i] = label2
   
     #inserting new column with labels
-    df.insert(3, "url_label", label_array)
+    df.insert(1, "url_label", label_array)
 
     return df
 
@@ -165,17 +166,18 @@ def main():
         print('Retrive the data batch from ELK******')
         net_traffic = get_elk_nlp()
         elk_df_nlp = pd.DataFrame(net_traffic)
-
+        
+        print(elk_df_nlp.head())
         #NLP prediction
         nlp_df = nlp_model(elk_df_nlp)
 
         nlp_df.insert(0, 'ID', range(count , count + len(nlp_df)))
-
+        
         # Exporting Pandas Data to Elasticsearch
         df_iter = nlp_df.iterrows()
         index, document = next(df_iter)
-
         helpers.bulk(es_client, nlp_doc_generator(nlp_df))
+        
         print('Batch', count , 'exported to ELK')
 
         count = count + len(elk_df_nlp)
