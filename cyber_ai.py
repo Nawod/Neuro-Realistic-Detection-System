@@ -59,6 +59,17 @@ def get_elk_nlp():
 
     return nlp_traffic
 
+#text cleaning
+def clean_text(df):
+    spec_chars = ["!",'"',"#","%","&","'","(",")",
+              "*","+",",","-",".","/",":",";","<",
+              "=",">","?","@","[","\\","]","^","_",
+              "`","{","|","}","~","–"]
+
+    for char in spec_chars:
+        df['url'] = df['url'].str.replace(char, ' ')
+
+    return df
 
 #tokenize inputs
 def token(text):
@@ -89,9 +100,14 @@ def url_predict(body):
 #nlp models prediciton
 def nlp_model(df):
     print('Malicious URLs classifing*******')
-     
+    
+    #text pre processing
+    new_df = df
+    new_df['url'] = new_df['host'].astype(str).values + new_df['uri'].astype(str).values
+    new_df = clean_text(new_df)
+
     #convert dataframe into a array
-    df_array = df[['url']].to_numpy()
+    df_array = new_df[['url']].to_numpy()
 
     # creating a blank series
     label_array = pd.Series([])
