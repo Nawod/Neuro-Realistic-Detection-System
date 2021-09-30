@@ -1,30 +1,24 @@
+from typing import Dict, List
+from google.cloud import aiplatform
 import numpy as np
 import pandas as pd
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 import json
 import time
-
-import tensorflow as tf
-import tensorflow_hub as hub
-from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
-
 
 # create a client instance of the library
 elastic_client = Elasticsearch()
 
 #import and train word tokenizer
 #import csv from github
-# url = "https://raw.githubusercontent.com/Nawod/malicious_url_classifier_api/master/archive/url_train.csv"
-# data = pd.read_csv(url)
-data = pd.read_csv('archive/url_train.csv')
+url = "https://raw.githubusercontent.com/Nawod/malicious_url_classifier_api/master/archive/url_train.csv"
+data = pd.read_csv(url)
+# data = pd.read_csv('archive/url_train.csv')
 tokenizer = Tokenizer(num_words=10000, split=' ')
 tokenizer.fit_on_texts(data['url'].values)
-
-#load the malicious url classification model
-mal_url_model = load_model('mal_url_model.h5')
 
 #retrive elk value
 def get_elk_nlp():
@@ -35,12 +29,12 @@ def get_elk_nlp():
     )
     # print(type(response))
 
-# nested inside the API response object
+    # nested inside the API response object
     elastic_docs_nlp = response["hits"]["hits"]
 
     traffics_n = elastic_docs_nlp
     nlp_traffic = {}
-#append data
+    #append data
     for num, doc in enumerate(traffics_n):
         traffic = doc["_source"]
 
@@ -77,6 +71,21 @@ def token(text):
     Y = pad_sequences(X, maxlen=200)
     return Y
 
+#vertex AI API call for get prediction
+def predict_mal_url_api(
+
+    project: str ="511747508882", 
+    endpoint_id: str ="2047431388407267328",
+    location: str = "us-central1",
+    instances: List = list
+):
+    aiplatform.init(project=project, location=location)
+
+    endpoint = aiplatform.Endpoint(endpoint_id)
+    prediction = endpoint.predict(instances=instances)
+    
+    return prediction
+
 #malicious url classification
 def url_predict(body):
 
@@ -84,7 +93,7 @@ def url_predict(body):
     input_data = json.loads(body)['data']
 
     embeded_text =  token(input_data) #tokenize the data
-    predictions = mal_url_model.predict(embeded_text) #classify the data
+    predictions = predict_mal_url_api(instances=embeded_text) #classify the data
     
     sentiment = (predictions > 0.5).astype(np.int) #calculate the index of max sentiment
     # sentiment = 1
@@ -97,6 +106,7 @@ def url_predict(body):
     return { #return the dictionary for endpoint
          "Label" : t_sentiment 
     }
+
 
 #nlp models prediciton
 def nlp_model(df):
@@ -135,8 +145,7 @@ def nlp_model(df):
 
     return df
 
-
-#index key values for mal url output
+    #index key values for mal url output
 mal_url_keys = [ "ID","host","uri","url_label"]
 def nlpFilterKeys(document):
     return {key: document[key] for key in mal_url_keys }
@@ -164,19 +173,19 @@ def main():
         print('Batch :', count)
         #retrive data and convert to dataframe
         print('Retrive the data batch from ELK******')
-        net_traffic = get_elk_nlp()
-        elk_df_nlp = pd.DataFrame(net_traffic)
-        
+        # net_traffic = get_elk_nlp()
+        # elk_df_nlp = pd.DataFrame(net_traffic)
+        elk_df_nlp = data
         print(elk_df_nlp.head())
         #NLP prediction
         nlp_df = nlp_model(elk_df_nlp)
 
         nlp_df.insert(0, 'ID', range(count , count + len(nlp_df)))
-        
+        print(nlp_df.head())
         # Exporting Pandas Data to Elasticsearch
         df_iter = nlp_df.iterrows()
         index, document = next(df_iter)
-        helpers.bulk(es_client, nlp_doc_generator(nlp_df))
+        # helpers.bulk(es_client, nlp_doc_generator(nlp_df))
         
         print('Batch', count , 'exported to ELK')
 
