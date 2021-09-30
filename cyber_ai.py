@@ -15,6 +15,7 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 # create a client instance of the library
 elastic_client = Elasticsearch()
 
+print('************************************')
 #import and train word tokenizer
 #import csv from github
 # url = "https://raw.githubusercontent.com/Nawod/malicious_url_classifier_api/master/archive/url_train.csv"
@@ -22,6 +23,8 @@ elastic_client = Elasticsearch()
 data = pd.read_csv('archive/url_train.csv')
 tokenizer = Tokenizer(num_words=10000, split=' ')
 tokenizer.fit_on_texts(data['url'].values)
+print('Tokenizer loaded')
+print('************************************')
 
 #load the malicious url classification model
 mal_url_model = load_model('mal_url_model.h5')
@@ -45,6 +48,11 @@ def get_elk_nlp():
         traffic = doc["_source"]
 
         for key, value in traffic.items():
+            if key == "@timestamp":
+                try:
+                    nlp_traffic[key] = np.append(nlp_traffic[key], value)
+                except KeyError:
+                    nlp_traffic[key] = np.array([value])
             if key == "host":
                 try:
                     nlp_traffic[key] = np.append(nlp_traffic[key], value)
@@ -87,7 +95,6 @@ def url_predict(body):
     predictions = mal_url_model.predict(embeded_text) #classify the data
     
     sentiment = (predictions > 0.5).astype(np.int) #calculate the index of max sentiment
-    # sentiment = 1
    
     if sentiment==0:
          t_sentiment = 'bad' #set appropriate sentiment
@@ -100,7 +107,7 @@ def url_predict(body):
 
 #nlp models prediciton
 def nlp_model(df):
-    print('Malicious URLs classifing*******')
+    print('Malicious URLs classifing_#####')
     
     #text pre processing
     new_df = df
@@ -109,7 +116,7 @@ def nlp_model(df):
     
     #convert dataframe into a array
     df_array = new_df[['url']].to_numpy()
-    print(df_array[:10])
+    
     # creating a blank series
     label_array = pd.Series([])
 
@@ -137,7 +144,7 @@ def nlp_model(df):
 
 
 #index key values for mal url output
-mal_url_keys = [ "ID","host","uri","url_label"]
+mal_url_keys = ["@timestamp","ID","host","uri","url_label"]
 def nlpFilterKeys(document):
     return {key: document[key] for key in mal_url_keys }
 
@@ -162,12 +169,12 @@ def main():
     count = 1
     while True:
         print('Batch :', count)
+
         #retrive data and convert to dataframe
-        print('Retrive the data batch from ELK******')
+        print('Retrive the data batch from ELK_#####')
         net_traffic = get_elk_nlp()
         elk_df_nlp = pd.DataFrame(net_traffic)
         
-        print(elk_df_nlp.head())
         #NLP prediction
         nlp_df = nlp_model(elk_df_nlp)
 
@@ -179,7 +186,7 @@ def main():
         helpers.bulk(es_client, nlp_doc_generator(nlp_df))
         
         print('Batch', count , 'exported to ELK')
-
+        print('************************************')
         count = count + len(elk_df_nlp)
         # get new records in every 5 seconds
         time.sleep(10)

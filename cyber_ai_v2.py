@@ -12,19 +12,22 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 # create a client instance of the library
 elastic_client = Elasticsearch()
 
+print('************************************')
 #import and train word tokenizer
 #import csv from github
-url = "https://raw.githubusercontent.com/Nawod/malicious_url_classifier_api/master/archive/url_train.csv"
-data = pd.read_csv(url)
-# data = pd.read_csv('archive/url_train.csv')
+# url = "https://raw.githubusercontent.com/Nawod/malicious_url_classifier_api/master/archive/url_train.csv"
+# data = pd.read_csv(url)
+data = pd.read_csv('archive/url_train.csv')
 tokenizer = Tokenizer(num_words=10000, split=' ')
 tokenizer.fit_on_texts(data['url'].values)
+print('Tokenizer Loaded')
+print('************************************')
 
 #retrive elk value
 def get_elk_nlp():
 
     response = elastic_client.search(
-        index='test_n',
+        index='nlp-log-1',
         body={},
     )
     # print(type(response))
@@ -39,6 +42,12 @@ def get_elk_nlp():
         traffic = doc["_source"]
 
         for key, value in traffic.items():
+            if key == "@timestamp":
+                try:
+                    nlp_traffic[key] = np.append(nlp_traffic[key], value)
+                except KeyError:
+                    nlp_traffic[key] = np.array([value])
+
             if key == "host":
                 try:
                     nlp_traffic[key] = np.append(nlp_traffic[key], value)
@@ -93,14 +102,16 @@ def url_predict(body):
     input_data = json.loads(body)['data']
 
     embeded_text =  token(input_data) #tokenize the data
-    predictions = predict_mal_url_api(instances=embeded_text) #classify the data
-    
-    sentiment = (predictions > 0.5).astype(np.int) #calculate the index of max sentiment
-    # sentiment = 1
-   
-    if sentiment==0:
-         t_sentiment = 'bad' #set appropriate sentiment
-    elif sentiment==1:
+    list = embeded_text.tolist()
+    response = predict_mal_url_api(instances=list) #call vertex AI API
+    prediction = response.predictions[0][0] #retrive data
+
+    # print('prediction: ', prediction)
+
+    #set appropriate sentiment
+    if prediction < 0.5:
+         t_sentiment = 'bad' 
+    elif prediction >= 0.5:
          t_sentiment = 'good'
 
     return { #return the dictionary for endpoint
@@ -110,7 +121,7 @@ def url_predict(body):
 
 #nlp models prediciton
 def nlp_model(df):
-    print('Malicious URLs classifing*******')
+    print('Malicious URLs classifing_#####')
     
     #text pre processing
     new_df = df
@@ -119,12 +130,11 @@ def nlp_model(df):
     
     #convert dataframe into a array
     df_array = new_df[['url']].to_numpy()
-    print(df_array[:10])
     # creating a blank series
     label_array = pd.Series([])
 
     for i in range(df_array.shape[0]):
-    
+    # for i in range(0,10):
         #create json requests 
         lists = df_array[i].tolist()
         data = {'data':lists}
@@ -146,7 +156,7 @@ def nlp_model(df):
     return df
 
     #index key values for mal url output
-mal_url_keys = [ "ID","host","uri","url_label"]
+mal_url_keys = [ "@timestamp","ID","host","uri","url_label"]
 def nlpFilterKeys(document):
     return {key: document[key] for key in mal_url_keys }
 
@@ -171,26 +181,30 @@ def main():
     count = 1
     while True:
         print('Batch :', count)
+        
         #retrive data and convert to dataframe
-        print('Retrive the data batch from ELK******')
-        # net_traffic = get_elk_nlp()
-        # elk_df_nlp = pd.DataFrame(net_traffic)
-        elk_df_nlp = data
-        print(elk_df_nlp.head())
+        print('Retrive the data batch from ELK_#####')
+
+        net_traffic = get_elk_nlp()
+        elk_df_nlp = pd.DataFrame(net_traffic)
+        
+        # print(elk_df_nlp.head())
         #NLP prediction
         nlp_df = nlp_model(elk_df_nlp)
 
         nlp_df.insert(0, 'ID', range(count , count + len(nlp_df)))
-        print(nlp_df.head())
+        # print(nlp_df.head())
+
         # Exporting Pandas Data to Elasticsearch
         df_iter = nlp_df.iterrows()
         index, document = next(df_iter)
-        # helpers.bulk(es_client, nlp_doc_generator(nlp_df))
+        helpers.bulk(es_client, nlp_doc_generator(nlp_df))
         
         print('Batch', count , 'exported to ELK')
+        print('************************************')
 
         count = count + len(elk_df_nlp)
-        # get new records in every 5 seconds
+        # get new records in every 10 seconds
         time.sleep(10)
 
 if __name__ == '__main__':
