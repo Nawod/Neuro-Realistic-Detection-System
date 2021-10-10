@@ -16,15 +16,17 @@ elastic_client = Elasticsearch()
 print('************************************')
 #import and train word tokenizer
 #import csv from github
-# url = "https://raw.githubusercontent.com/Nawod/malicious_url_classifier_api/master/archive/url_train.csv"
-# url_data = pd.read_csv(url)
+url = "https://raw.githubusercontent.com/Nawod/Neuro-Realistic-Detection-System/master/archive/url_combined_train.csv"
+url_data = pd.read_csv(url)
 #url dataset
-url_data = pd.read_csv('archive/url_combined_train.csv')
+# url_data = pd.read_csv('archive/url_combined_train.csv')
 url_tokenizer = Tokenizer(num_words=50000, split=' ')
 url_tokenizer.fit_on_texts(url_data['url'].values)
 
 #traffic dataset
-traffic_data = pd.read_csv('archive/traffic_combine_train.csv')
+url_t = "https://raw.githubusercontent.com/Nawod/Neuro-Realistic-Detection-System/master/archive/traffic_combine_train.csv"
+traffic_data = pd.read_csv(url_t)
+# traffic_data = pd.read_csv('archive/traffic_combine_train.csv')
 traffic_tokenizer = Tokenizer(num_words=5000, split=' ')
 traffic_tokenizer.fit_on_texts(traffic_data['feature'].values)
 print('Tokenizer Loaded')
